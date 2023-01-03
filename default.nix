@@ -5,28 +5,59 @@
     with lib; let
       validSymbols = ["[" "]" "+" "-" ">" "<" "." ","];
 
-      tokens =
+      rawTokens =
         builtins.filter
         (x: elem x validSymbols)
         (splitString "" code);
 
-      translateToken = token:
-        if token == "["
-        then "  while (tape[cell]) {\n"
-        else if token == "]"
-        then "  }\n"
-        else if token == "+"
-        then "  tape[cell] += 1;\n"
-        else if token == "-"
-        then "  tape[cell] -= 1;\n"
-        else if token == ">"
-        then "  cell += 1;\n"
-        else if token == "<"
-        then "  cell -= 1;\n"
-        else if token == "."
-        then "  putchar(tape[cell]);\n"
-        else if token == ","
-        then "  tape[cell] = getchar();\n"
+      tokens = let
+        count = list: c:
+          if length list == 0
+          then []
+          else if length list == 1
+          then [
+            {
+              symbol = head list;
+              repeat = "1";
+            }
+          ]
+          else let
+            x = elemAt list 0;
+            y = elemAt list 1;
+            xs = drop 2 list;
+          in
+            if x == y
+            then count ([y] ++ xs) (c + 1)
+            else
+              [
+                {
+                  symbol = x;
+                  repeat = toString c;
+                }
+              ]
+              ++ (count ([y] ++ xs) 1);
+      in
+        count rawTokens 1;
+
+      translateToken = token: let
+        repeat = string: num: concatStringsSep "" (genList (_: string) (toInt num));
+      in
+        if token.symbol == "["
+        then repeat "  while (tape[cell]) {\n" token.repeat
+        else if token.symbol == "]"
+        then repeat "  }\n" token.repeat
+        else if token.symbol == "+"
+        then "  tape[cell] += ${token.repeat};\n"
+        else if token.symbol == "-"
+        then "  tape[cell] -= ${token.repeat};\n"
+        else if token.symbol == ">"
+        then "  cell += ${token.repeat};\n"
+        else if token.symbol == "<"
+        then "  cell -= ${token.repeat};\n"
+        else if token.symbol == "."
+        then repeat "  putchar(tape[cell]);\n" token.repeat
+        else if token.symbol == ","
+        then repeat "  tape[cell] = getchar();\n" token.repeat
         else abort "Invalid character detected";
 
       cSource = ''
@@ -41,8 +72,8 @@
         }
       '';
 
-      forwardJumps = count (x: x == "[") tokens;
-      backwardJumps = count (x: x == "]") tokens;
+      forwardJumps = count (x: x == "[") rawTokens;
+      backwardJumps = count (x: x == "]") rawTokens;
     in
       if (forwardJumps != backwardJumps)
       then abort "${fowardJumps} forward jump(s) vs. ${backwardJumps} backward jump(s)"
